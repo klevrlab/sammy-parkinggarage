@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>King Library Selfie Demo</title>
+    <meta
+      name="description"
+      content="GitHub Pages-ready camera selfie demo for iframe embedding."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Recommended iframe embed:
+      <iframe
+        src="https://YOUR_GITHUB_USERNAME.github.io/sammy-parkinggarage/"
+        title="King Library Selfie Demo"
+        width="100%"
+        height="760"
+        style="border:0;max-width:460px"
+        allow="camera; clipboard-write; web-share"
+        referrerpolicy="strict-origin-when-cross-origin"
+      ></iframe>
+    -->
+    <main class="app" aria-live="polite">
+      <section class="billboard" aria-label="Campaign message">
+        <p id="billboardMessage"></p>
+      </section>
+
+      <section class="camera-card" aria-label="Selfie experience">
+        <div class="camera-header">
+          <h1 class="title">Selfie with Sammy</h1>
+          <a
+            id="openFullScreenLink"
+            class="text-link"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Open full screen</a
+          >
+        </div>
+
+        <p class="helper" id="helperText"></p>
+
+        <div class="camera-stage" id="cameraStage">
+          <video
+            id="cameraVideo"
+            playsinline
+            autoplay
+            muted
+            aria-label="Live front camera preview"
+          ></video>
+
+          <div class="overlay" id="liveOverlay" aria-hidden="true">
+            <div class="banner top" id="topBanner">
+              <span class="logo" id="logoTop"></span>
+              <span class="campaign-text" id="insideFrameMessageTop"></span>
+            </div>
+
+            <div class="sammy-wrap" id="sammyWrap">
+              <!-- HOTSWAP: Replace this inline SVG with sammy.png image element -->
+              <svg
+                id="sammyLive"
+                viewBox="0 0 200 240"
+                role="img"
+                aria-label="Sammy placeholder silhouette"
+              >
+                <path
+                  d="M92 20c-12 2-20 15-18 28l3 23c-18 8-28 28-23 47l9 30c-11 8-17 22-15 36l3 27h98l3-27c2-14-4-28-15-36l9-30c5-19-5-39-23-47l3-23c2-13-6-26-18-28l-8-1-8 9-8-9-8 1z"
+                />
+                <circle cx="75" cy="102" r="6" />
+                <circle cx="125" cy="102" r="6" />
+                <path d="M84 128c8 10 24 10 32 0" />
+              </svg>
+            </div>
+
+            <div class="banner bottom" id="bottomBanner">
+              <span class="logo" id="logoBottom"></span>
+              <span class="campaign-text" id="insideFrameMessageBottom"></span>
+            </div>
+          </div>
+
+          <div class="stage-state" id="stageState" role="status" hidden></div>
+        </div>
+
+        <div class="frame-picker" id="framePicker" role="group" aria-label="Choose a frame"></div>
+
+        <div class="actions">
+          <button id="flipBtn" class="btn btn-secondary" type="button">
+            Flip camera
+          </button>
+          <button id="captureBtn" class="btn btn-primary" type="button">
+            Capture
+          </button>
+          <button id="shareBtn" class="btn btn-secondary" type="button" disabled>
+            Share
+          </button>
+          <a id="downloadLink" class="btn btn-secondary disabled" download>
+            Download PNG
+          </a>
+        </div>
+      </section>
+
+      <section class="preview-card" id="previewCard" hidden aria-label="Captured preview">
+        <h2>Preview</h2>
+        <img id="previewImage" alt="Captured selfie preview" />
+      </section>
+    </main>
+
+    <dialog id="shareModal" aria-labelledby="shareModalTitle">
+      <h2 id="shareModalTitle">Share options</h2>
+      <p id="shareModalMessage"></p>
+      <div class="modal-actions">
+        <button id="copyCaptionBtn" class="btn btn-primary" type="button">
+          Copy caption
+        </button>
+        <button id="closeModalBtn" class="btn btn-secondary" type="button">
+          Close
+        </button>
+      </div>
+    </dialog>
+
+    <script src="script.js"></script>
+
+    <!--
+      README (quick setup for GitHub Pages):
+      1) Commit index.html, styles.css, script.js to your repository root.
+      2) In GitHub: Settings -> Pages -> Source: Deploy from a branch.
+      3) Select branch "main" and folder "/ (root)", then Save.
+      4) Open the published https://<user>.github.io/<repo>/ URL over HTTPS.
+      5) If embedding in another site, ensure iframe has allow="camera; clipboard-write; web-share".
+    -->
+  </body>
+</html>

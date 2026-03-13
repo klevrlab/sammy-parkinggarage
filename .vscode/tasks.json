@@ -1,0 +1,22 @@
+{
+  // Tasks for running the static selfie demo locally in Cursor / VS Code.
+  // Use: Terminal -> Run Task... -> "Serve King Library selfie demo"
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Serve King Library selfie demo",
+      "type": "shell",
+      "command": "npx http-server . -c-1 -p 4173",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}
+
