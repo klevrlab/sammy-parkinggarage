@@ -1,4 +1,4 @@
-:root {
+  :root {
   --sjsu-blue: #003f87;
   --sjsu-blue-deep: #002b5c;
   --sjsu-gold: #f2b134;
@@ -100,7 +100,8 @@ body {
 
 .camera-stage {
   position: relative;
-  width: 100%;
+  width: min(100%, 420px);
+  margin: 0 auto;
   border-radius: var(--radius-md);
   overflow: hidden;
   background: #e6eef9;
@@ -120,6 +121,15 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
+}
+
+.frame-asset-live {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
 }
 
 .banner {

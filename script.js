@@ -27,7 +27,8 @@ const CONFIG = {
   camera: {
     defaultFacingMode: "user",
     width: 1080,
-    height: 1440
+    height: 1440,
+    frameAssetOverscan: 0.018
   },
   sammy: {
     // HOTSWAP: Replace placeholder drawing with sammy.png data URL or hosted path.
@@ -36,6 +37,50 @@ const CONFIG = {
     anchorY: 0.78
   },
   frames: [
+    {
+      id: "polaroid01",
+      name: "Polaroid 01",
+      // HOTSWAP: Replace with final production frame asset if filename changes.
+      assetPath: "assets/Polaroid Design-01.png",
+      borderColor: "#ffffff",
+      borderWidthRatio: 0.012,
+      overlayTint: "rgba(0, 0, 0, 0)",
+      topBanner: {
+        show: false,
+        bg: "rgba(0, 0, 0, 0)",
+        logo: "",
+        message: ""
+      },
+      bottomBanner: {
+        show: false,
+        bg: "rgba(0, 0, 0, 0)",
+        logo: "",
+        message: ""
+      },
+      cornerStyle: "slants"
+    },
+    {
+      id: "polaroid02",
+      name: "Polaroid 02",
+      // HOTSWAP: Replace with final production frame asset if filename changes.
+      assetPath: "assets/Polaroid Design-02.png",
+      borderColor: "#f2b134",
+      borderWidthRatio: 0.01,
+      overlayTint: "rgba(0, 0, 0, 0)",
+      topBanner: {
+        show: false,
+        bg: "rgba(0, 0, 0, 0)",
+        logo: "",
+        message: ""
+      },
+      bottomBanner: {
+        show: false,
+        bg: "rgba(0, 0, 0, 0)",
+        logo: "",
+        message: ""
+      },
+      cornerStyle: "lines"
+    },
     {
       id: "classic",
       name: "Classic",
@@ -55,46 +100,6 @@ const CONFIG = {
         message: ""
       },
       cornerStyle: "brackets"
-    },
-    {
-      id: "bold",
-      name: "Bold",
-      borderColor: "#ffffff",
-      borderWidthRatio: 0.012,
-      overlayTint: "rgba(0, 28, 70, 0.18)",
-      topBanner: {
-        show: false,
-        bg: "rgba(0, 0, 0, 0)",
-        logo: "",
-        message: ""
-      },
-      bottomBanner: {
-        show: true,
-        bg: "rgba(0, 43, 92, 0.9)",
-        logo: "SJSU",
-        message: "King Library is for YOU"
-      },
-      cornerStyle: "slants"
-    },
-    {
-      id: "spartan",
-      name: "Spartan",
-      borderColor: "#f2b134",
-      borderWidthRatio: 0.01,
-      overlayTint: "rgba(0, 20, 52, 0.08)",
-      topBanner: {
-        show: true,
-        bg: "rgba(242, 177, 52, 0.88)",
-        logo: "King Library",
-        message: ""
-      },
-      bottomBanner: {
-        show: true,
-        bg: "rgba(0, 43, 92, 0.84)",
-        logo: "",
-        message: "King Library is for YOU"
-      },
-      cornerStyle: "lines"
     }
   ]
 };
@@ -105,7 +110,8 @@ const state = {
   selectedFrameId: CONFIG.frames[0].id,
   captureBlob: null,
   captureUrl: "",
-  isPreviewMirrored: true
+  isPreviewMirrored: true,
+  frameImageCache: new Map()
 };
 
 const el = {};
@@ -116,6 +122,7 @@ document.addEventListener("DOMContentLoaded", () => {
   buildFramePicker();
   setFrame(state.selectedFrameId);
   wireEvents();
+  preloadFrameAssets();
   initCamera();
 });
 
@@ -127,6 +134,7 @@ function cacheElements() {
   el.stageState = document.getElementById("stageState");
   el.framePicker = document.getElementById("framePicker");
   el.liveOverlay = document.getElementById("liveOverlay");
+  el.frameAssetLive = document.getElementById("frameAssetLive");
   el.topBanner = document.getElementById("topBanner");
   el.bottomBanner = document.getElementById("bottomBanner");
   el.logoTop = document.getElementById("logoTop");
@@ -288,11 +296,25 @@ function setFrame(frameId) {
 }
 
 function applyFrameToLiveOverlay(frame) {
-  el.liveOverlay.style.boxShadow = `inset 0 0 0 ${Math.max(
-    2,
-    Math.floor(el.liveOverlay.clientWidth * frame.borderWidthRatio)
-  )}px ${frame.borderColor}`;
-  el.liveOverlay.style.background = frame.overlayTint;
+  const hasAssetFrame = Boolean(frame.assetPath);
+  if (hasAssetFrame) {
+    // HOTSWAP: Replace frame PNG files by updating CONFIG.frames[].assetPath.
+    el.frameAssetLive.src = encodeURI(frame.assetPath);
+    el.frameAssetLive.style.display = "block";
+    const scale = 1 + CONFIG.camera.frameAssetOverscan * 2;
+    el.frameAssetLive.style.transform = `scale(${scale})`;
+    el.liveOverlay.style.boxShadow = "none";
+    el.liveOverlay.style.background = "transparent";
+  } else {
+    el.frameAssetLive.removeAttribute("src");
+    el.frameAssetLive.style.display = "none";
+    el.frameAssetLive.style.transform = "none";
+    el.liveOverlay.style.boxShadow = `inset 0 0 0 ${Math.max(
+      2,
+      Math.floor(el.liveOverlay.clientWidth * frame.borderWidthRatio)
+    )}px ${frame.borderColor}`;
+    el.liveOverlay.style.background = frame.overlayTint;
+  }
 
   el.topBanner.style.display = frame.topBanner.show ? "flex" : "none";
   el.topBanner.style.background = frame.topBanner.bg;
@@ -313,7 +335,7 @@ function applyFrameToLiveOverlay(frame) {
       : CONFIG.strings.insideFrameMessage;
 }
 
-function capturePhoto() {
+async function capturePhoto() {
   if (!state.stream || !el.cameraVideo.videoWidth || !el.cameraVideo.videoHeight) {
     showStageState("Camera preview is not ready yet.", "error");
     return;
@@ -326,7 +348,7 @@ function capturePhoto() {
   const ctx = canvas.getContext("2d");
 
   drawVideoCover(ctx, canvas.width, canvas.height, el.cameraVideo, state.isPreviewMirrored);
-  drawFrameOverlay(ctx, canvas.width, canvas.height, frame);
+  await drawFrameOverlay(ctx, canvas.width, canvas.height, frame);
   drawSammyOverlay(ctx, canvas.width, canvas.height);
 
   canvas.toBlob((blob) => {
@@ -363,7 +385,17 @@ function drawVideoCover(ctx, targetW, targetH, video, mirror) {
   ctx.restore();
 }
 
-function drawFrameOverlay(ctx, w, h, frame) {
+async function drawFrameOverlay(ctx, w, h, frame) {
+  if (frame.assetPath) {
+    const img = await getFrameAssetImage(frame.assetPath);
+    if (img) {
+      const overX = Math.round(w * CONFIG.camera.frameAssetOverscan);
+      const overY = Math.round(h * CONFIG.camera.frameAssetOverscan);
+      ctx.drawImage(img, -overX, -overY, w + overX * 2, h + overY * 2);
+    }
+    return;
+  }
+
   ctx.save();
   ctx.fillStyle = frame.overlayTint;
   ctx.fillRect(0, 0, w, h);
@@ -652,6 +684,36 @@ function hideStageState() {
 
 function getFrameById(frameId) {
   return CONFIG.frames.find((frame) => frame.id === frameId);
+}
+
+function preloadFrameAssets() {
+  const paths = CONFIG.frames.filter((frame) => frame.assetPath).map((frame) => frame.assetPath);
+  paths.forEach((path) => {
+    getFrameAssetImage(path);
+  });
+}
+
+async function getFrameAssetImage(assetPath) {
+  if (state.frameImageCache.has(assetPath)) {
+    return state.frameImageCache.get(assetPath);
+  }
+
+  try {
+    const img = await loadImage(encodeURI(assetPath));
+    state.frameImageCache.set(assetPath, img);
+    return img;
+  } catch (_err) {
+    return null;
+  }
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
 }
 
 window.initCamera = initCamera;
