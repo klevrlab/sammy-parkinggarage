@@ -6,7 +6,8 @@
     {
       "label": "Serve King Library selfie demo",
       "type": "shell",
-      "command": "npx http-server . -c-1 -p 4173",
+      "command": "npx.cmd http-server . -c-1 -p 4173",
+      "isBackground": true,
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -15,7 +16,19 @@
         "panel": "dedicated",
         "clear": true
       },
-      "problemMatcher": []
+      "problemMatcher": [
+        {
+          "owner": "custom",
+          "pattern": {
+            "regexp": "."
+          },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": ".",
+            "endsPattern": "Available on:"
+          }
+        }
+      ]
     }
   ]
 }

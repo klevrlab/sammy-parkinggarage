@@ -30,8 +30,8 @@ const CONFIG = {
     height: 1440
   },
   sammy: {
-    // HOTSWAP: Replace placeholder drawing with sammy.png data URL or hosted path.
-    placeholderScale: 0.3,
+    imageSrc: "assets/SammyTheSpartan.png",
+    scale: 0.3,
     anchorX: 0.79,
     anchorY: 0.78
   },
@@ -109,15 +109,22 @@ const state = {
 };
 
 const el = {};
+const sammyImage = new Image();
 
 document.addEventListener("DOMContentLoaded", () => {
   cacheElements();
   hydrateStaticCopy();
+  preloadSammyImage();
   buildFramePicker();
   setFrame(state.selectedFrameId);
   wireEvents();
   initCamera();
 });
+
+function preloadSammyImage() {
+  sammyImage.decoding = "async";
+  sammyImage.src = CONFIG.sammy.imageSrc;
+}
 
 function cacheElements() {
   el.billboardMessage = document.getElementById("billboardMessage");
@@ -503,41 +510,14 @@ function drawBannerOnCanvas(ctx, w, h, banner, position) {
 }
 
 function drawSammyOverlay(ctx, w, h) {
-  const scale = CONFIG.sammy.placeholderScale;
-  const baseW = w * scale;
-  const baseH = baseW * 1.2;
-  const x = w * CONFIG.sammy.anchorX - baseW / 2;
-  const y = h * CONFIG.sammy.anchorY - baseH / 2;
+  if (!sammyImage.complete || !sammyImage.naturalWidth) return;
 
-  // HOTSWAP: Draw actual sammy.png via Image() and ctx.drawImage(...) here.
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.shadowColor = "rgba(0,0,0,0.28)";
-  ctx.shadowBlur = 18;
-  ctx.fillStyle = "rgba(255,255,255,0.95)";
-  ctx.strokeStyle = "rgba(0,0,0,0.22)";
-  ctx.lineWidth = 4;
-
-  const path = new Path2D(
-    "M92 20c-12 2-20 15-18 28l3 23c-18 8-28 28-23 47l9 30c-11 8-17 22-15 36l3 27h98l3-27c2-14-4-28-15-36l9-30c5-19-5-39-23-47l3-23c2-13-6-26-18-28l-8-1-8 9-8-9-8 1z"
-  );
-  ctx.scale(baseW / 200, baseH / 240);
-  ctx.fill(path);
-  ctx.stroke(path);
-
-  ctx.fillStyle = "rgba(0,0,0,0.5)";
-  ctx.beginPath();
-  ctx.arc(75, 102, 6, 0, Math.PI * 2);
-  ctx.arc(125, 102, 6, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(84, 128);
-  ctx.quadraticCurveTo(100, 142, 116, 128);
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = "rgba(0,0,0,0.45)";
-  ctx.stroke();
-  ctx.restore();
+  const drawWidth = w * CONFIG.sammy.scale;
+  const imageRatio = sammyImage.naturalHeight / sammyImage.naturalWidth;
+  const drawHeight = drawWidth * imageRatio;
+  const x = w * CONFIG.sammy.anchorX - drawWidth / 2;
+  const y = h * CONFIG.sammy.anchorY - drawHeight / 2;
+  ctx.drawImage(sammyImage, x, y, drawWidth, drawHeight);
 }
 
 function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
