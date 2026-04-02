@@ -216,20 +216,9 @@ body {
 #sammyLive {
   width: 100%;
   height: auto;
+  display: block;
+  object-fit: contain;
   filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.35));
-}
-
-#sammyLive path,
-#sammyLive circle {
-  fill: rgba(255, 255, 255, 0.9);
-  stroke: rgba(0, 0, 0, 0.25);
-  stroke-width: 3px;
-}
-
-#sammyLive circle,
-#sammyLive path:last-child {
-  fill: rgba(0, 0, 0, 0.45);
-  stroke: none;
 }
 
 .stage-state {

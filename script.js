@@ -58,7 +58,8 @@ const CONFIG = {
     }
   },
   sammy: {
-    defaultPose: { x: 0.79, y: 0.78, scale: 0.3 }
+    defaultPose: { x: 0.79, y: 0.78, scale: 0.3 },
+    imageSrc: "assets/SammyTheSpartan.png"
   },
   frames: [
     {
@@ -121,6 +122,7 @@ const state = {
 };
 
 const el = {};
+const sammyImage = new Image();
 
 const ARController = {
   active: false,
@@ -160,6 +162,7 @@ const AnalyticsAdapter = {
 document.addEventListener("DOMContentLoaded", () => {
   cacheElements();
   hydrateStaticCopy();
+  preloadSammyImage();
   buildFramePicker();
   wireEvents();
   preloadFrameAssets();
@@ -172,6 +175,11 @@ document.addEventListener("DOMContentLoaded", () => {
   initCamera();
   AnalyticsAdapter.track("app_loaded");
 });
+
+function preloadSammyImage() {
+  sammyImage.decoding = "async";
+  sammyImage.src = CONFIG.sammy.imageSrc;
+}
 
 function cacheElements() {
   el.billboardMessage = document.getElementById("billboardMessage");
@@ -636,6 +644,20 @@ function drawSammyOverlay(ctx, w, h) {
     ctx.shadowColor = "rgba(0,0,0,0.28)";
     ctx.shadowBlur = 18;
     ctx.drawImage(state.sammyImage, rect.x, rect.y, rect.w, rect.h);
+    ctx.restore();
+    return;
+  }
+
+  if (sammyImage.complete && sammyImage.naturalWidth) {
+    const drawWidth = rect.w;
+    const imageRatio = sammyImage.naturalHeight / sammyImage.naturalWidth;
+    const drawHeight = drawWidth * imageRatio;
+    const x = rect.x + (rect.w - drawWidth) / 2;
+    const y = rect.y + (rect.h - drawHeight) / 2;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.28)";
+    ctx.shadowBlur = 18;
+    ctx.drawImage(sammyImage, x, y, drawWidth, drawHeight);
     ctx.restore();
     return;
   }

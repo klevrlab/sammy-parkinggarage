@@ -1,0 +1,14 @@
+{
+  // Run this config to start the local server and open Chrome.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Selfie Demo: Serve + Launch Chrome",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:4173",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "Serve King Library selfie demo"
+    }
+  ]
+}
