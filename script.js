@@ -63,10 +63,10 @@ const CONFIG = {
     temporalSmoothing: 0.32
   },
   sammy: {
-    defaultPose: { x: 0.79, y: 0.78, scale: 0.3 },
+    defaultPose: { x: 0.79, y: 0.52, scale: 0.3 },
     imageSrc: "assets/SammyTheSpartan.png",
-    shadowOpacity: 0.26,
-    shadowBlur: 18,
+    shadowOpacity: 0.32,
+    shadowBlur: 20,
     shadowScaleX: 0.34,
     shadowScaleY: 0.075
   },
@@ -857,10 +857,9 @@ function drawSammyOverlay(ctx, w, h) {
   }
 
   // HOTSWAP: remove fallback path once final sammy.png is guaranteed available.
+  drawSammyShadow(ctx, rect.x, rect.y, rect.w, rect.h);
   ctx.save();
   ctx.translate(rect.x, rect.y);
-  ctx.shadowColor = "rgba(0,0,0,0.28)";
-  ctx.shadowBlur = 18;
   ctx.fillStyle = "rgba(255,255,255,0.95)";
   ctx.strokeStyle = "rgba(0,0,0,0.22)";
   ctx.lineWidth = 4;

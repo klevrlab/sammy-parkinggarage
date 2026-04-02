@@ -209,25 +209,50 @@ body {
 .sammy-wrap {
   position: absolute;
   left: 79%;
-  top: 78%;
+  top: 52%;
   width: 30%;
-  max-width: 170px;
   transform: translate(-50%, -50%);
+  z-index: 2;
+  /* Ground shadow sits inside the wrap so it is not clipped by .camera-stage overflow */
+}
+
+.sammy-wrap::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 1%;
+  width: 72%;
+  height: 16%;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    ellipse 100% 100% at 50% 50%,
+    rgba(0, 0, 0, 0.42) 0%,
+    rgba(0, 0, 0, 0.16) 42%,
+    transparent 68%
+  );
+  pointer-events: none;
+  z-index: 0;
 }
 
 .sammy-image-live {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: auto;
   display: none;
-  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.38))
+    drop-shadow(0 14px 22px rgba(0, 0, 0, 0.2));
 }
 
 #sammyLive {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: auto;
   display: block;
   object-fit: contain;
-  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.38))
+    drop-shadow(0 14px 22px rgba(0, 0, 0, 0.2));
 }
 
 .stage-state {
