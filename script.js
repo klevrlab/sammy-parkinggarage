@@ -6,15 +6,19 @@ const CONFIG = {
     billboardMessage: "King Library is for EVERYONE",
     insideFrameMessage: "King Library is for YOU",
     helperText: "Take a selfie with Sammy (demo overlay)",
-    fallbackNoCamera:
-      "Camera unavailable on this device. You can still switch frames and preview the layout.",
     loadingCamera: "Starting camera...",
     permissionDenied:
       "Camera permission is off. Enable camera access in your browser settings and reload this page.",
+    fallbackNoCamera:
+      "Camera unavailable on this device. You can still switch frames and preview the layout.",
     genericCameraError:
       "We could not start your camera. Try a different browser or open full screen.",
     iframePermissionHint:
       "If this page is embedded, camera permissions may be blocked. Use Open full screen.",
+    arUnavailable:
+      "AR mode is not supported on this browser/device yet. Staying in selfie mode.",
+    arFallbackNotice:
+      "AR mode enabled (beta). Camera fallback is active while Sammy anchors are finalized.",
     shareCaption:
       "King Library is for YOU — selfie with Sammy! #SJSU #KingLibrary",
     shareFallbackMessage:
@@ -24,83 +28,80 @@ const CONFIG = {
     // HOTSWAP: Replace with public campaign link when ready.
     campaignUrl: "https://library.sjsu.edu/"
   },
+  analytics: {
+    enabled: true,
+    debugConsole: false
+  },
+  assets: {
+    // HOTSWAP: bump this per campaign release.
+    campaignVersion: "2026-03-selfie-mvp",
+    sammy: {
+      // HOTSWAP: replace with production Sammy art.
+      path: "assets/sammy.png",
+      version: "1",
+      enabled: true
+    },
+    frames: {
+      // HOTSWAP: replace frame asset filenames or versions here only.
+      polaroid01: { path: "assets/Polaroid Design-01.png", version: "1" },
+      polaroid02: { path: "assets/Polaroid Design-02.png", version: "1" }
+    }
+  },
   camera: {
     defaultFacingMode: "user",
     width: 1080,
     height: 1440,
-    frameAssetOverscan: 0.018
+    frameAssetOverscan: 0.018,
+    cropProfiles: {
+      default: { biasX: 0, biasY: 0 },
+      selfiePortrait: { biasX: 0, biasY: -0.06 }
+    }
   },
   sammy: {
-    // HOTSWAP: Replace placeholder drawing with sammy.png data URL or hosted path.
-    placeholderScale: 0.3,
-    anchorX: 0.79,
-    anchorY: 0.78
+    defaultPose: { x: 0.79, y: 0.78, scale: 0.3 }
   },
   frames: [
     {
       id: "polaroid01",
       name: "Polaroid 01",
-      // HOTSWAP: Replace with final production frame asset if filename changes.
-      assetPath: "assets/Polaroid Design-01.png",
+      assetId: "polaroid01",
+      topBanner: { show: false, bg: "rgba(0,0,0,0)", logo: "", message: "" },
+      bottomBanner: { show: false, bg: "rgba(0,0,0,0)", logo: "", message: "" },
+      overlayTint: "rgba(0,0,0,0)",
       borderColor: "#ffffff",
-      borderWidthRatio: 0.012,
-      overlayTint: "rgba(0, 0, 0, 0)",
-      topBanner: {
-        show: false,
-        bg: "rgba(0, 0, 0, 0)",
-        logo: "",
-        message: ""
-      },
-      bottomBanner: {
-        show: false,
-        bg: "rgba(0, 0, 0, 0)",
-        logo: "",
-        message: ""
-      },
-      cornerStyle: "slants"
+      borderWidthRatio: 0.012
     },
     {
       id: "polaroid02",
       name: "Polaroid 02",
-      // HOTSWAP: Replace with final production frame asset if filename changes.
-      assetPath: "assets/Polaroid Design-02.png",
+      assetId: "polaroid02",
+      topBanner: { show: false, bg: "rgba(0,0,0,0)", logo: "", message: "" },
+      bottomBanner: { show: false, bg: "rgba(0,0,0,0)", logo: "", message: "" },
+      overlayTint: "rgba(0,0,0,0)",
       borderColor: "#f2b134",
-      borderWidthRatio: 0.01,
-      overlayTint: "rgba(0, 0, 0, 0)",
-      topBanner: {
-        show: false,
-        bg: "rgba(0, 0, 0, 0)",
-        logo: "",
-        message: ""
-      },
-      bottomBanner: {
-        show: false,
-        bg: "rgba(0, 0, 0, 0)",
-        logo: "",
-        message: ""
-      },
-      cornerStyle: "lines"
+      borderWidthRatio: 0.01
     },
     {
       id: "classic",
       name: "Classic",
+      overlayTint: "rgba(0, 26, 59, 0.12)",
       borderColor: "#f2b134",
       borderWidthRatio: 0.016,
-      overlayTint: "rgba(0, 26, 59, 0.12)",
       topBanner: {
         show: true,
         bg: "rgba(0, 63, 135, 0.85)",
         logo: "SJSU / King Library",
         message: "King Library is for YOU"
       },
-      bottomBanner: {
-        show: false,
-        bg: "rgba(0, 0, 0, 0.0)",
-        logo: "",
-        message: ""
-      },
-      cornerStyle: "brackets"
+      bottomBanner: { show: false, bg: "rgba(0,0,0,0)", logo: "", message: "" }
     }
+  ],
+  qaMatrix: [
+    "iOS Safari (camera permission and share)",
+    "Android Chrome (camera, frame switch, share)",
+    "Iframe embed with restricted permissions",
+    "Full-screen fallback path",
+    "No camera / denied permission states"
   ]
 };
 
@@ -111,19 +112,65 @@ const state = {
   captureBlob: null,
   captureUrl: "",
   isPreviewMirrored: true,
-  frameImageCache: new Map()
+  frameImageCache: new Map(),
+  sammyImage: null,
+  sammyPose: { ...CONFIG.sammy.defaultPose },
+  activeCropProfile: "default",
+  mode: "selfie",
+  arSupported: false
 };
 
 const el = {};
+
+const ARController = {
+  active: false,
+  initialized: false,
+  async init() {
+    this.initialized = true;
+  },
+  async start() {
+    if (!this.initialized) await this.init();
+    this.active = true;
+  },
+  stop() {
+    this.active = false;
+  }
+};
+
+const AnalyticsAdapter = {
+  events: [],
+  track(eventName, payload = {}) {
+    if (!CONFIG.analytics.enabled) return;
+    const event = {
+      eventName,
+      payload,
+      campaignVersion: CONFIG.assets.campaignVersion,
+      ts: new Date().toISOString()
+    };
+    this.events.push(event);
+    if (typeof window.onSammyAnalyticsEvent === "function") {
+      window.onSammyAnalyticsEvent(event);
+    }
+    if (CONFIG.analytics.debugConsole) {
+      console.info("[analytics]", eventName, payload);
+    }
+  }
+};
 
 document.addEventListener("DOMContentLoaded", () => {
   cacheElements();
   hydrateStaticCopy();
   buildFramePicker();
-  setFrame(state.selectedFrameId);
   wireEvents();
   preloadFrameAssets();
+  preloadSammyAsset();
+  applySammyPoseToLive();
+  updateSammyCalibrationReadout();
+  setFrame(state.selectedFrameId);
+  updateModeButtons();
+  detectARSupport();
   initCamera();
+  AnalyticsAdapter.track("app_loaded");
 });
 
 function cacheElements() {
@@ -141,10 +188,22 @@ function cacheElements() {
   el.logoBottom = document.getElementById("logoBottom");
   el.insideFrameMessageTop = document.getElementById("insideFrameMessageTop");
   el.insideFrameMessageBottom = document.getElementById("insideFrameMessageBottom");
+  el.sammyWrap = document.getElementById("sammyWrap");
+  el.sammyLive = document.getElementById("sammyLive");
+  el.sammyImageLive = document.getElementById("sammyImageLive");
+  el.modeSelfieBtn = document.getElementById("modeSelfieBtn");
+  el.modeArBtn = document.getElementById("modeArBtn");
   el.flipBtn = document.getElementById("flipBtn");
   el.captureBtn = document.getElementById("captureBtn");
   el.shareBtn = document.getElementById("shareBtn");
   el.downloadLink = document.getElementById("downloadLink");
+  el.calibrateBtn = document.getElementById("calibrateBtn");
+  el.sammyCalibration = document.getElementById("sammyCalibration");
+  el.sammyXRange = document.getElementById("sammyXRange");
+  el.sammyYRange = document.getElementById("sammyYRange");
+  el.sammyScaleRange = document.getElementById("sammyScaleRange");
+  el.resetSammyBtn = document.getElementById("resetSammyBtn");
+  el.sammyCalibrationReadout = document.getElementById("sammyCalibrationReadout");
   el.previewCard = document.getElementById("previewCard");
   el.previewImage = document.getElementById("previewImage");
   el.shareModal = document.getElementById("shareModal");
@@ -159,26 +218,22 @@ function hydrateStaticCopy() {
   el.helperText.textContent = CONFIG.strings.helperText;
   el.shareModalMessage.textContent = CONFIG.strings.shareFallbackMessage;
   el.openFullScreenLink.href = window.location.href;
-}
-
-function buildFramePicker() {
-  el.framePicker.innerHTML = "";
-  CONFIG.frames.forEach((frame) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "frame-btn";
-    btn.dataset.frameId = frame.id;
-    btn.setAttribute("aria-pressed", "false");
-    btn.setAttribute("aria-label", `Select ${frame.name} frame`);
-    btn.innerHTML = `${frame.name}`;
-    btn.addEventListener("click", () => setFrame(frame.id));
-    el.framePicker.appendChild(btn);
-  });
+  el.sammyXRange.value = String(state.sammyPose.x);
+  el.sammyYRange.value = String(state.sammyPose.y);
+  el.sammyScaleRange.value = String(state.sammyPose.scale);
 }
 
 function wireEvents() {
+  el.modeSelfieBtn.addEventListener("click", () => {
+    setExperienceMode("selfie", "mode_toggle");
+  });
+  el.modeArBtn.addEventListener("click", () => {
+    setExperienceMode("ar", "mode_toggle");
+  });
+
   el.flipBtn.addEventListener("click", async () => {
     state.currentFacingMode = state.currentFacingMode === "user" ? "environment" : "user";
+    AnalyticsAdapter.track("camera_flip", { facingMode: state.currentFacingMode });
     await initCamera();
   });
 
@@ -187,17 +242,115 @@ function wireEvents() {
   el.copyCaptionBtn.addEventListener("click", copyCaptionToClipboard);
   el.closeModalBtn.addEventListener("click", () => el.shareModal.close());
 
+  el.calibrateBtn.addEventListener("click", () => {
+    const nextHidden = !el.sammyCalibration.hidden;
+    el.sammyCalibration.hidden = nextHidden;
+    el.calibrateBtn.setAttribute("aria-expanded", String(!nextHidden));
+  });
+
+  el.sammyXRange.addEventListener("input", () => {
+    state.sammyPose.x = Number(el.sammyXRange.value);
+    onSammyPoseChanged();
+  });
+  el.sammyYRange.addEventListener("input", () => {
+    state.sammyPose.y = Number(el.sammyYRange.value);
+    onSammyPoseChanged();
+  });
+  el.sammyScaleRange.addEventListener("input", () => {
+    state.sammyPose.scale = Number(el.sammyScaleRange.value);
+    onSammyPoseChanged();
+  });
+  el.resetSammyBtn.addEventListener("click", () => {
+    state.sammyPose = { ...CONFIG.sammy.defaultPose };
+    el.sammyXRange.value = String(state.sammyPose.x);
+    el.sammyYRange.value = String(state.sammyPose.y);
+    el.sammyScaleRange.value = String(state.sammyPose.scale);
+    onSammyPoseChanged();
+  });
+
   if (typeof el.shareModal.addEventListener === "function") {
     el.shareModal.addEventListener("click", (event) => {
-      const dialogDimensions = el.shareModal.getBoundingClientRect();
+      const rect = el.shareModal.getBoundingClientRect();
       const clickedOutside =
-        event.clientX < dialogDimensions.left ||
-        event.clientX > dialogDimensions.right ||
-        event.clientY < dialogDimensions.top ||
-        event.clientY > dialogDimensions.bottom;
+        event.clientX < rect.left ||
+        event.clientX > rect.right ||
+        event.clientY < rect.top ||
+        event.clientY > rect.bottom;
       if (clickedOutside) el.shareModal.close();
     });
   }
+}
+
+function onSammyPoseChanged() {
+  applySammyPoseToLive();
+  updateSammyCalibrationReadout();
+  AnalyticsAdapter.track("sammy_pose_changed", { ...state.sammyPose });
+}
+
+function updateSammyCalibrationReadout() {
+  const pctX = Math.round(state.sammyPose.x * 100);
+  const pctY = Math.round(state.sammyPose.y * 100);
+  const pctScale = Math.round(state.sammyPose.scale * 100);
+  el.sammyCalibrationReadout.textContent = `X ${pctX}% · Y ${pctY}% · Scale ${pctScale}%`;
+}
+
+function applySammyPoseToLive() {
+  el.sammyWrap.style.left = `${(state.sammyPose.x * 100).toFixed(1)}%`;
+  el.sammyWrap.style.top = `${(state.sammyPose.y * 100).toFixed(1)}%`;
+  el.sammyWrap.style.width = `${(state.sammyPose.scale * 100).toFixed(1)}%`;
+}
+
+async function detectARSupport() {
+  let supported = false;
+  if (navigator.xr && typeof navigator.xr.isSessionSupported === "function") {
+    try {
+      supported = await navigator.xr.isSessionSupported("immersive-ar");
+    } catch (_err) {
+      supported = false;
+    }
+  }
+  state.arSupported = supported;
+  updateModeButtons();
+  AnalyticsAdapter.track("ar_capability_checked", { supported });
+}
+
+function updateModeButtons() {
+  const selfieActive = state.mode === "selfie";
+  const arActive = state.mode === "ar";
+  el.modeSelfieBtn.classList.toggle("active", selfieActive);
+  el.modeSelfieBtn.setAttribute("aria-pressed", String(selfieActive));
+  el.modeArBtn.classList.toggle("active", arActive);
+  el.modeArBtn.setAttribute("aria-pressed", String(arActive));
+  el.modeArBtn.classList.toggle("unavailable", !state.arSupported);
+  el.modeArBtn.setAttribute("aria-disabled", String(!state.arSupported));
+}
+
+async function setExperienceMode(nextMode, source = "code") {
+  if (nextMode === state.mode) return;
+
+  if (nextMode === "ar" && !state.arSupported) {
+    showStageState(CONFIG.strings.arUnavailable, "error");
+    setTimeout(hideStageState, 1700);
+    state.mode = "selfie";
+    updateModeButtons();
+    AnalyticsAdapter.track("mode_change_blocked", { requested: "ar", source });
+    return;
+  }
+
+  state.mode = nextMode;
+  if (nextMode === "ar") {
+    await ARController.start();
+    showStageState(CONFIG.strings.arFallbackNotice, "loading");
+    setTimeout(() => {
+      if (state.stream) hideStageState();
+    }, 1600);
+  } else {
+    ARController.stop();
+    if (state.stream) hideStageState();
+  }
+
+  updateModeButtons();
+  AnalyticsAdapter.track("mode_changed", { mode: nextMode, source });
 }
 
 async function initCamera() {
@@ -214,15 +367,17 @@ async function initCamera() {
 
   state.stream = stream;
   el.cameraVideo.srcObject = stream;
-
   state.isPreviewMirrored = state.currentFacingMode === "user";
   el.cameraVideo.style.transform = state.isPreviewMirrored ? "scaleX(-1)" : "scaleX(1)";
 
   try {
     await el.cameraVideo.play();
+    updatePreviewCropProfile();
     hideStageState();
+    AnalyticsAdapter.track("camera_started", { facingMode: state.currentFacingMode });
   } catch (_err) {
     showStageState(CONFIG.strings.genericCameraError, "error");
+    AnalyticsAdapter.track("camera_play_failed");
   }
 }
 
@@ -251,6 +406,21 @@ async function requestCameraStream(facingMode) {
   }
 }
 
+function updatePreviewCropProfile() {
+  const vW = el.cameraVideo.videoWidth || 0;
+  const vH = el.cameraVideo.videoHeight || 1;
+  const ratio = vW / vH;
+  const useSelfiePortrait = state.currentFacingMode === "user" && ratio < 1;
+  state.activeCropProfile = useSelfiePortrait ? "selfiePortrait" : "default";
+  const profile = getActiveCropProfile();
+  const posY = 50 + profile.biasY * 100;
+  el.cameraVideo.style.objectPosition = `50% ${posY}%`;
+}
+
+function getActiveCropProfile() {
+  return CONFIG.camera.cropProfiles[state.activeCropProfile] || CONFIG.camera.cropProfiles.default;
+}
+
 function stopCurrentStream() {
   if (!state.stream) return;
   state.stream.getTracks().forEach((track) => track.stop());
@@ -260,23 +430,33 @@ function stopCurrentStream() {
 function handleCameraError(error) {
   const inIframe = window.self !== window.top;
   const hint = inIframe ? ` ${CONFIG.strings.iframePermissionHint}` : "";
+  let message = `${CONFIG.strings.genericCameraError}${hint}`;
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    showStageState(`${CONFIG.strings.fallbackNoCamera}${hint}`, "error");
-    return;
+    message = `${CONFIG.strings.fallbackNoCamera}${hint}`;
+  } else if (error && (error.name === "NotAllowedError" || error.name === "SecurityError")) {
+    message = `${CONFIG.strings.permissionDenied}${hint}`;
+  } else if (error && (error.name === "NotFoundError" || error.name === "DevicesNotFoundError")) {
+    message = `${CONFIG.strings.fallbackNoCamera}${hint}`;
   }
 
-  if (error && (error.name === "NotAllowedError" || error.name === "SecurityError")) {
-    showStageState(`${CONFIG.strings.permissionDenied}${hint}`, "error");
-    return;
-  }
+  showStageState(message, "error");
+  AnalyticsAdapter.track("camera_error", { errorName: error ? error.name : "unknown" });
+}
 
-  if (error && (error.name === "NotFoundError" || error.name === "DevicesNotFoundError")) {
-    showStageState(`${CONFIG.strings.fallbackNoCamera}${hint}`, "error");
-    return;
-  }
-
-  showStageState(`${CONFIG.strings.genericCameraError}${hint}`, "error");
+function buildFramePicker() {
+  el.framePicker.innerHTML = "";
+  CONFIG.frames.forEach((frame) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "frame-btn";
+    btn.dataset.frameId = frame.id;
+    btn.setAttribute("aria-pressed", "false");
+    btn.setAttribute("aria-label", `Select ${frame.name} frame`);
+    btn.textContent = frame.name;
+    btn.addEventListener("click", () => setFrame(frame.id));
+    el.framePicker.appendChild(btn);
+  });
 }
 
 function setFrame(frameId) {
@@ -293,13 +473,15 @@ function setFrame(frameId) {
 
   applyFrameToLiveOverlay(frame);
   updateDownloadMetadata();
+  AnalyticsAdapter.track("frame_changed", { frameId: frame.id, frameName: frame.name });
 }
 
 function applyFrameToLiveOverlay(frame) {
-  const hasAssetFrame = Boolean(frame.assetPath);
+  const frameAssetUrl = resolveFrameAssetUrl(frame);
+  const hasAssetFrame = Boolean(frameAssetUrl);
+
   if (hasAssetFrame) {
-    // HOTSWAP: Replace frame PNG files by updating CONFIG.frames[].assetPath.
-    el.frameAssetLive.src = encodeURI(frame.assetPath);
+    el.frameAssetLive.src = frameAssetUrl;
     el.frameAssetLive.style.display = "block";
     const scale = 1 + CONFIG.camera.frameAssetOverscan * 2;
     el.frameAssetLive.style.transform = `scale(${scale})`;
@@ -354,6 +536,7 @@ async function capturePhoto() {
   canvas.toBlob((blob) => {
     if (!blob) return;
     setCaptureResult(blob, frame.name);
+    AnalyticsAdapter.track("capture_success", { frameId: frame.id });
   }, "image/png");
 }
 
@@ -362,6 +545,7 @@ function drawVideoCover(ctx, targetW, targetH, video, mirror) {
   const srcH = video.videoHeight;
   const srcRatio = srcW / srcH;
   const targetRatio = targetW / targetH;
+  const crop = getActiveCropProfile();
 
   let sx = 0;
   let sy = 0;
@@ -376,6 +560,11 @@ function drawVideoCover(ctx, targetW, targetH, video, mirror) {
     sy = (srcH - sh) / 2;
   }
 
+  const offsetX = crop.biasX * (srcW - sw);
+  const offsetY = crop.biasY * (srcH - sh);
+  sx = clamp(sx + offsetX, 0, srcW - sw);
+  sy = clamp(sy + offsetY, 0, srcH - sh);
+
   ctx.save();
   if (mirror) {
     ctx.translate(targetW, 0);
@@ -386,8 +575,9 @@ function drawVideoCover(ctx, targetW, targetH, video, mirror) {
 }
 
 async function drawFrameOverlay(ctx, w, h, frame) {
-  if (frame.assetPath) {
-    const img = await getFrameAssetImage(frame.assetPath);
+  const frameAssetUrl = resolveFrameAssetUrl(frame);
+  if (frameAssetUrl) {
+    const img = await getFrameAssetImage(frameAssetUrl);
     if (img) {
       const overX = Math.round(w * CONFIG.camera.frameAssetOverscan);
       const overY = Math.round(h * CONFIG.camera.frameAssetOverscan);
@@ -399,110 +589,17 @@ async function drawFrameOverlay(ctx, w, h, frame) {
   ctx.save();
   ctx.fillStyle = frame.overlayTint;
   ctx.fillRect(0, 0, w, h);
-
   const border = Math.max(8, Math.floor(w * frame.borderWidthRatio));
   ctx.strokeStyle = frame.borderColor;
   ctx.lineWidth = border;
   ctx.strokeRect(border / 2, border / 2, w - border, h - border);
-
-  drawFrameCorners(ctx, w, h, frame, border);
   drawBannerOnCanvas(ctx, w, h, frame.topBanner, "top");
   drawBannerOnCanvas(ctx, w, h, frame.bottomBanner, "bottom");
   ctx.restore();
 }
 
-function drawFrameCorners(ctx, w, h, frame, border) {
-  const c = frame.borderColor;
-  const size = Math.floor(Math.min(w, h) * 0.1);
-  ctx.save();
-  ctx.strokeStyle = c;
-  ctx.fillStyle = c;
-  ctx.lineWidth = Math.max(4, border / 1.6);
-
-  if (frame.cornerStyle === "brackets") {
-    drawBracket(ctx, border, border, size, "tl");
-    drawBracket(ctx, w - border, border, size, "tr");
-    drawBracket(ctx, border, h - border, size, "bl");
-    drawBracket(ctx, w - border, h - border, size, "br");
-  } else if (frame.cornerStyle === "slants") {
-    drawSlant(ctx, border, border, size, "tl");
-    drawSlant(ctx, w - border, border, size, "tr");
-    drawSlant(ctx, border, h - border, size, "bl");
-    drawSlant(ctx, w - border, h - border, size, "br");
-  } else {
-    drawLineCorner(ctx, border, border, size, "tl");
-    drawLineCorner(ctx, w - border, border, size, "tr");
-    drawLineCorner(ctx, border, h - border, size, "bl");
-    drawLineCorner(ctx, w - border, h - border, size, "br");
-  }
-  ctx.restore();
-}
-
-function drawBracket(ctx, x, y, size, pos) {
-  ctx.beginPath();
-  if (pos === "tl") {
-    ctx.moveTo(x + size, y);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x, y + size);
-  } else if (pos === "tr") {
-    ctx.moveTo(x - size, y);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x, y + size);
-  } else if (pos === "bl") {
-    ctx.moveTo(x + size, y);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x, y - size);
-  } else {
-    ctx.moveTo(x - size, y);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x, y - size);
-  }
-  ctx.stroke();
-}
-
-function drawSlant(ctx, x, y, size, pos) {
-  ctx.beginPath();
-  if (pos === "tl") {
-    ctx.moveTo(x, y + size);
-    ctx.lineTo(x + size, y);
-  } else if (pos === "tr") {
-    ctx.moveTo(x, y + size);
-    ctx.lineTo(x - size, y);
-  } else if (pos === "bl") {
-    ctx.moveTo(x, y - size);
-    ctx.lineTo(x + size, y);
-  } else {
-    ctx.moveTo(x, y - size);
-    ctx.lineTo(x - size, y);
-  }
-  ctx.stroke();
-}
-
-function drawLineCorner(ctx, x, y, size, pos) {
-  ctx.beginPath();
-  if (pos === "tl") {
-    ctx.moveTo(x, y + size);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x + size, y);
-  } else if (pos === "tr") {
-    ctx.moveTo(x, y + size);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x - size, y);
-  } else if (pos === "bl") {
-    ctx.moveTo(x, y - size);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x + size, y);
-  } else {
-    ctx.moveTo(x, y - size);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x - size, y);
-  }
-  ctx.stroke();
-}
-
 function drawBannerOnCanvas(ctx, w, h, banner, position) {
   if (!banner.show) return;
-
   const bannerH = Math.round(h * 0.12);
   const y = position === "top" ? 0 : h - bannerH;
   const padX = Math.round(w * 0.04);
@@ -510,59 +607,58 @@ function drawBannerOnCanvas(ctx, w, h, banner, position) {
   ctx.fillStyle = banner.bg;
   ctx.fillRect(0, y, w, bannerH);
 
-  const logoText = banner.logo;
-  if (logoText) {
+  if (banner.logo) {
     ctx.font = `700 ${Math.round(h * 0.023)}px sans-serif`;
-    const logoWidth = ctx.measureText(logoText).width + 30;
+    const logoWidth = ctx.measureText(banner.logo).width + 30;
     const logoH = Math.round(h * 0.042);
     const logoY = y + (bannerH - logoH) / 2;
-
     ctx.strokeStyle = "rgba(255,255,255,0.7)";
     ctx.lineWidth = 2;
     roundRect(ctx, padX, logoY, logoWidth, logoH, logoH / 2, false, true);
-
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = "#fff";
     ctx.font = `800 ${Math.round(h * 0.02)}px sans-serif`;
-    ctx.fillText(logoText, padX + 14, logoY + logoH * 0.68);
+    ctx.fillText(banner.logo, padX + 14, logoY + logoH * 0.68);
   }
 
-  const msg =
-    banner.message !== undefined ? banner.message : CONFIG.strings.insideFrameMessage;
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `800 ${Math.round(h * 0.035)}px sans-serif`;
-  const msgX = padX + (logoText ? Math.round(w * 0.24) : 0);
-  if (msg) ctx.fillText(msg, msgX, y + bannerH * 0.64);
+  const msg = banner.message !== undefined ? banner.message : CONFIG.strings.insideFrameMessage;
+  if (msg) {
+    ctx.fillStyle = "#fff";
+    ctx.font = `800 ${Math.round(h * 0.035)}px sans-serif`;
+    const msgX = padX + (banner.logo ? Math.round(w * 0.24) : 0);
+    ctx.fillText(msg, msgX, y + bannerH * 0.64);
+  }
 }
 
 function drawSammyOverlay(ctx, w, h) {
-  const scale = CONFIG.sammy.placeholderScale;
-  const baseW = w * scale;
-  const baseH = baseW * 1.2;
-  const x = w * CONFIG.sammy.anchorX - baseW / 2;
-  const y = h * CONFIG.sammy.anchorY - baseH / 2;
+  const rect = getSammyRect(w, h);
+  if (state.sammyImage) {
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.28)";
+    ctx.shadowBlur = 18;
+    ctx.drawImage(state.sammyImage, rect.x, rect.y, rect.w, rect.h);
+    ctx.restore();
+    return;
+  }
 
-  // HOTSWAP: Draw actual sammy.png via Image() and ctx.drawImage(...) here.
+  // HOTSWAP: remove fallback path once final sammy.png is guaranteed available.
   ctx.save();
-  ctx.translate(x, y);
+  ctx.translate(rect.x, rect.y);
   ctx.shadowColor = "rgba(0,0,0,0.28)";
   ctx.shadowBlur = 18;
   ctx.fillStyle = "rgba(255,255,255,0.95)";
   ctx.strokeStyle = "rgba(0,0,0,0.22)";
   ctx.lineWidth = 4;
-
   const path = new Path2D(
     "M92 20c-12 2-20 15-18 28l3 23c-18 8-28 28-23 47l9 30c-11 8-17 22-15 36l3 27h98l3-27c2-14-4-28-15-36l9-30c5-19-5-39-23-47l3-23c2-13-6-26-18-28l-8-1-8 9-8-9-8 1z"
   );
-  ctx.scale(baseW / 200, baseH / 240);
+  ctx.scale(rect.w / 200, rect.h / 240);
   ctx.fill(path);
   ctx.stroke(path);
-
   ctx.fillStyle = "rgba(0,0,0,0.5)";
   ctx.beginPath();
   ctx.arc(75, 102, 6, 0, Math.PI * 2);
   ctx.arc(125, 102, 6, 0, Math.PI * 2);
   ctx.fill();
-
   ctx.beginPath();
   ctx.moveTo(84, 128);
   ctx.quadraticCurveTo(100, 142, 116, 128);
@@ -572,32 +668,28 @@ function drawSammyOverlay(ctx, w, h) {
   ctx.restore();
 }
 
-function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
-  const r = Math.min(radius, width / 2, height / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + width, y, x + width, y + height, r);
-  ctx.arcTo(x + width, y + height, x, y + height, r);
-  ctx.arcTo(x, y + height, x, y, r);
-  ctx.arcTo(x, y, x + width, y, r);
-  ctx.closePath();
-  if (fill) ctx.fill();
-  if (stroke) ctx.stroke();
+function getSammyRect(w, h) {
+  const baseW = w * state.sammyPose.scale;
+  const baseH = baseW * 1.2;
+  const centerX = w * state.sammyPose.x;
+  const centerY = h * state.sammyPose.y;
+  return {
+    x: centerX - baseW / 2,
+    y: centerY - baseH / 2,
+    w: baseW,
+    h: baseH
+  };
 }
 
 function setCaptureResult(blob, frameName) {
   if (state.captureUrl) URL.revokeObjectURL(state.captureUrl);
-
   state.captureBlob = blob;
   state.captureUrl = URL.createObjectURL(blob);
   el.previewImage.src = state.captureUrl;
   el.previewCard.hidden = false;
-
-  const fileName = buildCaptureFilename(frameName);
   el.downloadLink.href = state.captureUrl;
-  el.downloadLink.download = fileName;
+  el.downloadLink.download = buildCaptureFilename(frameName);
   el.downloadLink.classList.remove("disabled");
-
   el.shareBtn.disabled = false;
 }
 
@@ -614,6 +706,7 @@ function buildCaptureFilename(frameName) {
 }
 
 async function shareCapture() {
+  AnalyticsAdapter.track("share_attempt", { hasCapture: Boolean(state.captureBlob) });
   if (!state.captureBlob) {
     await copyCaptionToClipboard();
     showStageState("Take a capture first. Caption copied for convenience.", "error");
@@ -631,20 +724,17 @@ async function shareCapture() {
       const frame = getFrameById(state.selectedFrameId);
       const fileName = buildCaptureFilename(frame.name);
       const file = new File([state.captureBlob], fileName, { type: "image/png" });
-
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          ...shareData,
-          files: [file]
-        });
+        await navigator.share({ ...shareData, files: [file] });
+        AnalyticsAdapter.track("share_success", { mode: "file_share" });
         return;
       }
-
       await navigator.share(shareData);
+      AnalyticsAdapter.track("share_success", { mode: "text_share" });
       return;
     }
   } catch (_err) {
-    // Ignore user-cancel and continue to fallback modal if needed.
+    // user cancelled or share unavailable
   }
 
   if (typeof el.shareModal.showModal === "function") {
@@ -652,6 +742,7 @@ async function shareCapture() {
   } else {
     alert(`${CONFIG.strings.shareFallbackMessage}\n\n${CONFIG.strings.shareCaption}`);
   }
+  AnalyticsAdapter.track("share_fallback_modal");
 }
 
 async function copyCaptionToClipboard() {
@@ -669,38 +760,69 @@ async function copyCaptionToClipboard() {
   }
 }
 
-function showStageState(message, type) {
-  el.stageState.hidden = false;
-  el.stageState.textContent = message;
-  el.stageState.classList.remove("error");
-  if (type === "error") el.stageState.classList.add("error");
+function preloadFrameAssets() {
+  CONFIG.frames.forEach((frame) => {
+    const url = resolveFrameAssetUrl(frame);
+    if (url) getFrameAssetImage(url);
+  });
 }
 
-function hideStageState() {
-  el.stageState.hidden = true;
-  el.stageState.textContent = "";
-  el.stageState.classList.remove("error");
+function preloadSammyAsset() {
+  const sammyUrl = resolveSammyAssetUrl();
+  if (!sammyUrl) {
+    applySammyLiveAsset(null);
+    return;
+  }
+  loadImage(sammyUrl)
+    .then((img) => {
+      state.sammyImage = img;
+      applySammyLiveAsset(sammyUrl);
+    })
+    .catch(() => {
+      state.sammyImage = null;
+      applySammyLiveAsset(null);
+    });
+}
+
+function applySammyLiveAsset(src) {
+  if (src) {
+    el.sammyImageLive.src = src;
+    el.sammyImageLive.style.display = "block";
+    el.sammyLive.style.display = "none";
+  } else {
+    el.sammyImageLive.removeAttribute("src");
+    el.sammyImageLive.style.display = "none";
+    el.sammyLive.style.display = "block";
+  }
+}
+
+function resolveFrameAssetUrl(frame) {
+  if (!frame.assetId) return "";
+  const manifest = CONFIG.assets.frames[frame.assetId];
+  if (!manifest || !manifest.path) return "";
+  return getVersionedAssetUrl(manifest.path, manifest.version);
+}
+
+function resolveSammyAssetUrl() {
+  const entry = CONFIG.assets.sammy;
+  if (!entry || !entry.enabled || !entry.path) return "";
+  return getVersionedAssetUrl(entry.path, entry.version);
+}
+
+function getVersionedAssetUrl(path, version) {
+  if (!version) return encodeURI(path);
+  return `${encodeURI(path)}?v=${encodeURIComponent(version)}`;
 }
 
 function getFrameById(frameId) {
   return CONFIG.frames.find((frame) => frame.id === frameId);
 }
 
-function preloadFrameAssets() {
-  const paths = CONFIG.frames.filter((frame) => frame.assetPath).map((frame) => frame.assetPath);
-  paths.forEach((path) => {
-    getFrameAssetImage(path);
-  });
-}
-
-async function getFrameAssetImage(assetPath) {
-  if (state.frameImageCache.has(assetPath)) {
-    return state.frameImageCache.get(assetPath);
-  }
-
+async function getFrameAssetImage(url) {
+  if (state.frameImageCache.has(url)) return state.frameImageCache.get(url);
   try {
-    const img = await loadImage(encodeURI(assetPath));
-    state.frameImageCache.set(assetPath, img);
+    const img = await loadImage(url);
+    state.frameImageCache.set(url, img);
     return img;
   } catch (_err) {
     return null;
@@ -714,6 +836,36 @@ function loadImage(src) {
     image.onerror = reject;
     image.src = src;
   });
+}
+
+function showStageState(message, type) {
+  el.stageState.hidden = false;
+  el.stageState.textContent = message;
+  el.stageState.classList.remove("error");
+  if (type === "error") el.stageState.classList.add("error");
+}
+
+function hideStageState() {
+  el.stageState.hidden = true;
+  el.stageState.textContent = "";
+  el.stageState.classList.remove("error");
+}
+
+function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+  if (fill) ctx.fill();
+  if (stroke) ctx.stroke();
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 window.initCamera = initCamera;

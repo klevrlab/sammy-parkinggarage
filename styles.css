@@ -98,6 +98,33 @@ body {
   color: var(--text-muted);
 }
 
+.mode-switch {
+  margin-bottom: 0.6rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.mode-btn {
+  border: 1px solid rgba(0, 63, 135, 0.26);
+  background: #f0f5ff;
+  color: var(--sjsu-blue-deep);
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 0.86rem;
+  padding: 0.6rem 0.5rem;
+}
+
+.mode-btn.active {
+  color: #fff;
+  background: var(--sjsu-blue);
+  border-color: var(--sjsu-blue);
+}
+
+.mode-btn.unavailable {
+  opacity: 0.72;
+}
+
 .camera-stage {
   position: relative;
   width: min(100%, 420px);
@@ -172,10 +199,18 @@ body {
 
 .sammy-wrap {
   position: absolute;
-  right: 4%;
-  bottom: 15%;
-  width: 28%;
+  left: 79%;
+  top: 78%;
+  width: 30%;
   max-width: 170px;
+  transform: translate(-50%, -50%);
+}
+
+.sammy-image-live {
+  width: 100%;
+  height: auto;
+  display: none;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.35));
 }
 
 #sammyLive {
@@ -249,6 +284,38 @@ body {
   gap: 0.55rem;
 }
 
+.sammy-calibration {
+  margin-top: 0.7rem;
+  border: 1px solid rgba(0, 63, 135, 0.22);
+  border-radius: var(--radius-md);
+  background: #f7faff;
+  padding: 0.6rem;
+}
+
+.sammy-calibration .subheading {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  color: var(--sjsu-blue-deep);
+}
+
+.sammy-calibration label {
+  display: block;
+  margin-top: 0.4rem;
+  margin-bottom: 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.sammy-calibration input[type="range"] {
+  width: 100%;
+}
+
+.calibration-note {
+  margin-top: 0.5rem;
+  margin-bottom: 0;
+}
+
 .btn {
   border: 0;
   border-radius: 11px;
@@ -313,6 +380,6 @@ dialog h2 {
   }
 
   .actions {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
