@@ -57,9 +57,18 @@ const CONFIG = {
       selfiePortrait: { biasX: 0, biasY: -0.06 }
     }
   },
+  segmentation: {
+    modelSelection: 1,
+    edgeBlurPx: 3,
+    temporalSmoothing: 0.32
+  },
   sammy: {
     defaultPose: { x: 0.79, y: 0.78, scale: 0.3 },
-    imageSrc: "assets/SammyTheSpartan.png"
+    imageSrc: "assets/SammyTheSpartan.png",
+    shadowOpacity: 0.26,
+    shadowBlur: 18,
+    shadowScaleX: 0.34,
+    shadowScaleY: 0.075
   },
   frames: [
     {
@@ -118,11 +127,27 @@ const state = {
   sammyPose: { ...CONFIG.sammy.defaultPose },
   activeCropProfile: "default",
   mode: "selfie",
-  arSupported: false
+  arSupported: false,
+  liveRenderRaf: 0,
+  segmenter: null,
+  segmentationEnabled: false,
+  segmentationInFlight: false,
+  latestSegmentationMask: null
 };
 
 const el = {};
 const sammyImage = new Image();
+const compositor = {
+  personCanvas: document.createElement("canvas"),
+  personCtx: null,
+  currentMaskCanvas: document.createElement("canvas"),
+  currentMaskCtx: null,
+  smoothMaskCanvas: document.createElement("canvas"),
+  smoothMaskCtx: null,
+  tempMaskCanvas: document.createElement("canvas"),
+  tempMaskCtx: null,
+  hasSmoothedMask: false
+};
 
 const ARController = {
   active: false,
@@ -163,6 +188,7 @@ document.addEventListener("DOMContentLoaded", () => {
   cacheElements();
   hydrateStaticCopy();
   preloadSammyImage();
+  initSegmentation();
   buildFramePicker();
   wireEvents();
   preloadFrameAssets();
@@ -181,11 +207,29 @@ function preloadSammyImage() {
   sammyImage.src = CONFIG.sammy.imageSrc;
 }
 
+function initSegmentation() {
+  if (typeof SelfieSegmentation !== "function") return;
+
+  const segmenter = new SelfieSegmentation({
+    locateFile: (file) =>
+      `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+  });
+  segmenter.setOptions({ modelSelection: CONFIG.segmentation.modelSelection });
+  segmenter.onResults((results) => {
+    state.latestSegmentationMask = results.segmentationMask || null;
+  });
+
+  state.segmenter = segmenter;
+  state.segmentationEnabled = true;
+  if (el.sammyWrap) el.sammyWrap.hidden = true;
+}
+
 function cacheElements() {
   el.billboardMessage = document.getElementById("billboardMessage");
   el.helperText = document.getElementById("helperText");
   el.openFullScreenLink = document.getElementById("openFullScreenLink");
   el.cameraVideo = document.getElementById("cameraVideo");
+  el.cameraComposite = document.getElementById("cameraComposite");
   el.stageState = document.getElementById("stageState");
   el.framePicker = document.getElementById("framePicker");
   el.liveOverlay = document.getElementById("liveOverlay");
@@ -376,11 +420,11 @@ async function initCamera() {
   state.stream = stream;
   el.cameraVideo.srcObject = stream;
   state.isPreviewMirrored = state.currentFacingMode === "user";
-  el.cameraVideo.style.transform = state.isPreviewMirrored ? "scaleX(-1)" : "scaleX(1)";
 
   try {
     await el.cameraVideo.play();
     updatePreviewCropProfile();
+    startLiveRenderLoop();
     hideStageState();
     AnalyticsAdapter.track("camera_started", { facingMode: state.currentFacingMode });
   } catch (_err) {
@@ -430,6 +474,11 @@ function getActiveCropProfile() {
 }
 
 function stopCurrentStream() {
+  if (state.liveRenderRaf) {
+    cancelAnimationFrame(state.liveRenderRaf);
+    state.liveRenderRaf = 0;
+  }
+  compositor.hasSmoothedMask = false;
   if (!state.stream) return;
   state.stream.getTracks().forEach((track) => track.stop());
   state.stream = null;
@@ -538,8 +587,13 @@ async function capturePhoto() {
   const ctx = canvas.getContext("2d");
 
   drawVideoCover(ctx, canvas.width, canvas.height, el.cameraVideo, state.isPreviewMirrored);
+  if (state.segmentationEnabled && state.latestSegmentationMask) {
+    drawSammyOverlay(ctx, canvas.width, canvas.height);
+    drawPersonForeground(ctx, canvas.width, canvas.height);
+  } else {
+    drawSammyOverlay(ctx, canvas.width, canvas.height);
+  }
   await drawFrameOverlay(ctx, canvas.width, canvas.height, frame);
-  drawSammyOverlay(ctx, canvas.width, canvas.height);
 
   canvas.toBlob((blob) => {
     if (!blob) return;
@@ -549,8 +603,11 @@ async function capturePhoto() {
 }
 
 function drawVideoCover(ctx, targetW, targetH, video, mirror) {
-  const srcW = video.videoWidth;
-  const srcH = video.videoHeight;
+  drawSourceCover(ctx, targetW, targetH, video, video.videoWidth, video.videoHeight, mirror);
+}
+
+function drawSourceCover(ctx, targetW, targetH, source, srcW, srcH, mirror) {
+  if (!srcW || !srcH) return;
   const srcRatio = srcW / srcH;
   const targetRatio = targetW / targetH;
   const crop = getActiveCropProfile();
@@ -578,8 +635,151 @@ function drawVideoCover(ctx, targetW, targetH, video, mirror) {
     ctx.translate(targetW, 0);
     ctx.scale(-1, 1);
   }
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, targetW, targetH);
+  ctx.drawImage(source, sx, sy, sw, sh, 0, 0, targetW, targetH);
   ctx.restore();
+}
+
+function startLiveRenderLoop() {
+  if (!el.cameraComposite) return;
+  if (state.liveRenderRaf) cancelAnimationFrame(state.liveRenderRaf);
+
+  const render = () => {
+    if (!state.stream) return;
+    drawLiveCompositeFrame();
+    state.liveRenderRaf = requestAnimationFrame(render);
+  };
+
+  render();
+}
+
+function drawLiveCompositeFrame() {
+  if (!el.cameraVideo.videoWidth || !el.cameraVideo.videoHeight) return;
+  const ctx = ensureCompositeCanvas();
+  if (!ctx) return;
+
+  const w = el.cameraComposite.width;
+  const h = el.cameraComposite.height;
+  ctx.clearRect(0, 0, w, h);
+  drawVideoCover(ctx, w, h, el.cameraVideo, state.isPreviewMirrored);
+
+  if (!state.segmentationEnabled) return;
+
+  maybeRequestSegmentation();
+  drawSammyOverlay(ctx, w, h);
+  if (!state.latestSegmentationMask) return;
+
+  drawPersonForeground(ctx, w, h);
+}
+
+function ensureCompositeCanvas() {
+  const rect = el.cameraComposite.getBoundingClientRect();
+  const nextW = Math.max(1, Math.round(rect.width));
+  const nextH = Math.max(1, Math.round(rect.height));
+  if (el.cameraComposite.width !== nextW || el.cameraComposite.height !== nextH) {
+    el.cameraComposite.width = nextW;
+    el.cameraComposite.height = nextH;
+  }
+  return el.cameraComposite.getContext("2d");
+}
+
+function maybeRequestSegmentation() {
+  if (!state.segmenter || state.segmentationInFlight) return;
+  state.segmentationInFlight = true;
+  state.segmenter
+    .send({ image: el.cameraVideo })
+    .catch(() => {
+      state.segmentationEnabled = false;
+      if (el.sammyWrap) el.sammyWrap.hidden = false;
+    })
+    .finally(() => {
+      state.segmentationInFlight = false;
+    });
+}
+
+function drawPersonForeground(ctx, w, h) {
+  const mask = state.latestSegmentationMask;
+  if (!mask) return;
+
+  if (!compositor.personCtx) {
+    compositor.personCtx = compositor.personCanvas.getContext("2d");
+  }
+  if (!compositor.currentMaskCtx) {
+    compositor.currentMaskCtx = compositor.currentMaskCanvas.getContext("2d");
+  }
+  if (!compositor.smoothMaskCtx) {
+    compositor.smoothMaskCtx = compositor.smoothMaskCanvas.getContext("2d");
+  }
+  if (!compositor.tempMaskCtx) {
+    compositor.tempMaskCtx = compositor.tempMaskCanvas.getContext("2d");
+  }
+
+  if (compositor.personCanvas.width !== w || compositor.personCanvas.height !== h) {
+    compositor.personCanvas.width = w;
+    compositor.personCanvas.height = h;
+  }
+  if (compositor.currentMaskCanvas.width !== w || compositor.currentMaskCanvas.height !== h) {
+    compositor.currentMaskCanvas.width = w;
+    compositor.currentMaskCanvas.height = h;
+    compositor.hasSmoothedMask = false;
+  }
+  if (compositor.smoothMaskCanvas.width !== w || compositor.smoothMaskCanvas.height !== h) {
+    compositor.smoothMaskCanvas.width = w;
+    compositor.smoothMaskCanvas.height = h;
+    compositor.hasSmoothedMask = false;
+  }
+  if (compositor.tempMaskCanvas.width !== w || compositor.tempMaskCanvas.height !== h) {
+    compositor.tempMaskCanvas.width = w;
+    compositor.tempMaskCanvas.height = h;
+    compositor.hasSmoothedMask = false;
+  }
+
+  const cmctx = compositor.currentMaskCtx;
+  cmctx.clearRect(0, 0, w, h);
+  drawSourceCover(
+    cmctx,
+    w,
+    h,
+    mask,
+    mask.width || el.cameraVideo.videoWidth,
+    mask.height || el.cameraVideo.videoHeight,
+    state.isPreviewMirrored
+  );
+  updateSmoothedMask(w, h);
+
+  const pctx = compositor.personCtx;
+  pctx.clearRect(0, 0, w, h);
+  drawVideoCover(pctx, w, h, el.cameraVideo, state.isPreviewMirrored);
+
+  pctx.globalCompositeOperation = "destination-in";
+  pctx.filter = `blur(${CONFIG.segmentation.edgeBlurPx}px)`;
+  pctx.drawImage(compositor.smoothMaskCanvas, 0, 0, w, h);
+  pctx.filter = "none";
+  pctx.globalCompositeOperation = "source-over";
+
+  ctx.drawImage(compositor.personCanvas, 0, 0, w, h);
+}
+
+function updateSmoothedMask(w, h) {
+  const smooth = Math.min(0.95, Math.max(0.05, CONFIG.segmentation.temporalSmoothing));
+  const smctx = compositor.smoothMaskCtx;
+  const tmctx = compositor.tempMaskCtx;
+
+  if (!compositor.hasSmoothedMask) {
+    smctx.clearRect(0, 0, w, h);
+    smctx.drawImage(compositor.currentMaskCanvas, 0, 0, w, h);
+    compositor.hasSmoothedMask = true;
+    return;
+  }
+
+  tmctx.clearRect(0, 0, w, h);
+  tmctx.drawImage(compositor.smoothMaskCanvas, 0, 0, w, h);
+
+  smctx.clearRect(0, 0, w, h);
+  smctx.globalAlpha = 1 - smooth;
+  smctx.drawImage(compositor.tempMaskCanvas, 0, 0, w, h);
+  smctx.globalAlpha = smooth;
+  smctx.drawImage(compositor.currentMaskCanvas, 0, 0, w, h);
+  smctx.globalAlpha = 1;
 }
 
 async function drawFrameOverlay(ctx, w, h, frame) {
@@ -640,11 +840,8 @@ function drawBannerOnCanvas(ctx, w, h, banner, position) {
 function drawSammyOverlay(ctx, w, h) {
   const rect = getSammyRect(w, h);
   if (state.sammyImage) {
-    ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,0.28)";
-    ctx.shadowBlur = 18;
+    drawSammyShadow(ctx, rect.x, rect.y, rect.w, rect.h);
     ctx.drawImage(state.sammyImage, rect.x, rect.y, rect.w, rect.h);
-    ctx.restore();
     return;
   }
 
@@ -654,11 +851,8 @@ function drawSammyOverlay(ctx, w, h) {
     const drawHeight = drawWidth * imageRatio;
     const x = rect.x + (rect.w - drawWidth) / 2;
     const y = rect.y + (rect.h - drawHeight) / 2;
-    ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,0.28)";
-    ctx.shadowBlur = 18;
+    drawSammyShadow(ctx, x, y, drawWidth, drawHeight);
     ctx.drawImage(sammyImage, x, y, drawWidth, drawHeight);
-    ctx.restore();
     return;
   }
 
@@ -701,6 +895,22 @@ function getSammyRect(w, h) {
     w: baseW,
     h: baseH
   };
+}
+
+function drawSammyShadow(ctx, x, y, drawWidth, drawHeight) {
+  const centerX = x + drawWidth * 0.52;
+  const centerY = y + drawHeight * 0.95;
+  const radiusX = drawWidth * CONFIG.sammy.shadowScaleX;
+  const radiusY = drawHeight * CONFIG.sammy.shadowScaleY;
+
+  ctx.save();
+  ctx.fillStyle = `rgba(0, 0, 0, ${CONFIG.sammy.shadowOpacity})`;
+  ctx.shadowColor = "rgba(0, 0, 0, 0.34)";
+  ctx.shadowBlur = CONFIG.sammy.shadowBlur;
+  ctx.beginPath();
+  ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function setCaptureResult(blob, frameName) {
