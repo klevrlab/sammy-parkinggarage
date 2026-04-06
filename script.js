@@ -245,7 +245,6 @@ function cacheElements() {
   el.captureBtn = document.getElementById("captureBtn");
   el.shareBtn = document.getElementById("shareBtn");
   el.downloadLink = document.getElementById("downloadLink");
-  el.calibrateBtn = document.getElementById("calibrateBtn");
   el.sammyCalibration = document.getElementById("sammyCalibration");
   el.sammyXRange = document.getElementById("sammyXRange");
   el.sammyYRange = document.getElementById("sammyYRange");
@@ -282,12 +281,6 @@ function wireEvents() {
   el.shareBtn.addEventListener("click", shareCapture);
   el.copyCaptionBtn.addEventListener("click", copyCaptionToClipboard);
   el.closeModalBtn.addEventListener("click", () => el.shareModal.close());
-
-  el.calibrateBtn.addEventListener("click", () => {
-    const nextHidden = !el.sammyCalibration.hidden;
-    el.sammyCalibration.hidden = nextHidden;
-    el.calibrateBtn.setAttribute("aria-expanded", String(!nextHidden));
-  });
 
   el.sammyXRange.addEventListener("input", () => {
     state.sammyPose.x = Number(el.sammyXRange.value);
