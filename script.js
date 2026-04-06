@@ -15,10 +15,6 @@ const CONFIG = {
       "We could not start your camera. Try a different browser or open full screen.",
     iframePermissionHint:
       "If this page is embedded, camera permissions may be blocked. Use Open full screen.",
-    arUnavailable:
-      "AR mode is not supported on this browser/device yet. Staying in selfie mode.",
-    arFallbackNotice:
-      "AR mode enabled (beta). Camera fallback is active while Sammy anchors are finalized.",
     shareCaption:
       "King Library is for YOU — selfie with Sammy! #SJSU #KingLibrary",
     shareFallbackMessage:
@@ -126,8 +122,6 @@ const state = {
   sammyImage: null,
   sammyPose: { ...CONFIG.sammy.defaultPose },
   activeCropProfile: "default",
-  mode: "selfie",
-  arSupported: false,
   liveRenderRaf: 0,
   segmenter: null,
   segmentationEnabled: false,
@@ -147,21 +141,6 @@ const compositor = {
   tempMaskCanvas: document.createElement("canvas"),
   tempMaskCtx: null,
   hasSmoothedMask: false
-};
-
-const ARController = {
-  active: false,
-  initialized: false,
-  async init() {
-    this.initialized = true;
-  },
-  async start() {
-    if (!this.initialized) await this.init();
-    this.active = true;
-  },
-  stop() {
-    this.active = false;
-  }
 };
 
 const AnalyticsAdapter = {
@@ -196,8 +175,6 @@ document.addEventListener("DOMContentLoaded", () => {
   applySammyPoseToLive();
   updateSammyCalibrationReadout();
   setFrame(state.selectedFrameId);
-  updateModeButtons();
-  detectARSupport();
   initCamera();
   AnalyticsAdapter.track("app_loaded");
 });
@@ -243,8 +220,6 @@ function cacheElements() {
   el.sammyWrap = document.getElementById("sammyWrap");
   el.sammyLive = document.getElementById("sammyLive");
   el.sammyImageLive = document.getElementById("sammyImageLive");
-  el.modeSelfieBtn = document.getElementById("modeSelfieBtn");
-  el.modeArBtn = document.getElementById("modeArBtn");
   el.flipBtn = document.getElementById("flipBtn");
   el.captureBtn = document.getElementById("captureBtn");
   el.shareBtn = document.getElementById("shareBtn");
@@ -276,13 +251,6 @@ function hydrateStaticCopy() {
 }
 
 function wireEvents() {
-  el.modeSelfieBtn.addEventListener("click", () => {
-    setExperienceMode("selfie", "mode_toggle");
-  });
-  el.modeArBtn.addEventListener("click", () => {
-    setExperienceMode("ar", "mode_toggle");
-  });
-
   el.flipBtn.addEventListener("click", async () => {
     state.currentFacingMode = state.currentFacingMode === "user" ? "environment" : "user";
     AnalyticsAdapter.track("camera_flip", { facingMode: state.currentFacingMode });
@@ -350,59 +318,6 @@ function applySammyPoseToLive() {
   el.sammyWrap.style.left = `${(state.sammyPose.x * 100).toFixed(1)}%`;
   el.sammyWrap.style.top = `${(state.sammyPose.y * 100).toFixed(1)}%`;
   el.sammyWrap.style.width = `${(state.sammyPose.scale * 100).toFixed(1)}%`;
-}
-
-async function detectARSupport() {
-  let supported = false;
-  if (navigator.xr && typeof navigator.xr.isSessionSupported === "function") {
-    try {
-      supported = await navigator.xr.isSessionSupported("immersive-ar");
-    } catch (_err) {
-      supported = false;
-    }
-  }
-  state.arSupported = supported;
-  updateModeButtons();
-  AnalyticsAdapter.track("ar_capability_checked", { supported });
-}
-
-function updateModeButtons() {
-  const selfieActive = state.mode === "selfie";
-  const arActive = state.mode === "ar";
-  el.modeSelfieBtn.classList.toggle("active", selfieActive);
-  el.modeSelfieBtn.setAttribute("aria-pressed", String(selfieActive));
-  el.modeArBtn.classList.toggle("active", arActive);
-  el.modeArBtn.setAttribute("aria-pressed", String(arActive));
-  el.modeArBtn.classList.toggle("unavailable", !state.arSupported);
-  el.modeArBtn.setAttribute("aria-disabled", String(!state.arSupported));
-}
-
-async function setExperienceMode(nextMode, source = "code") {
-  if (nextMode === state.mode) return;
-
-  if (nextMode === "ar" && !state.arSupported) {
-    showStageState(CONFIG.strings.arUnavailable, "error");
-    setTimeout(hideStageState, 1700);
-    state.mode = "selfie";
-    updateModeButtons();
-    AnalyticsAdapter.track("mode_change_blocked", { requested: "ar", source });
-    return;
-  }
-
-  state.mode = nextMode;
-  if (nextMode === "ar") {
-    await ARController.start();
-    showStageState(CONFIG.strings.arFallbackNotice, "loading");
-    setTimeout(() => {
-      if (state.stream) hideStageState();
-    }, 1600);
-  } else {
-    ARController.stop();
-    if (state.stream) hideStageState();
-  }
-
-  updateModeButtons();
-  AnalyticsAdapter.track("mode_changed", { mode: nextMode, source });
 }
 
 async function initCamera() {
