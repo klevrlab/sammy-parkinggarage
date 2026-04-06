@@ -60,7 +60,7 @@ const CONFIG = {
     maskContrastPercent: 260
   },
   sammy: {
-    defaultPose: { x: 0.79, y: 0.52, scale: 0.3 },
+    defaultPose: { x: 0.79, y: 0.55, scale: 0.3 },
     imageSrc: "assets/SammyTheSpartan.png",
     mobileScaleMultiplier: 0.88,
     shadowOpacity: 0.32,
