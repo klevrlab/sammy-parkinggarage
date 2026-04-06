@@ -406,3 +406,66 @@ dialog h2 {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
+
+@media (max-width: 480px) {
+  body {
+    /* Prefer modern mobile viewport units to avoid iOS URL bar jumps. */
+    min-height: 100svh;
+  }
+
+  .app {
+    width: 100%;
+    padding: 0.55rem 0.6rem 0.75rem;
+  }
+
+  .billboard {
+    margin-bottom: 0.55rem;
+    padding: 0.55rem 0.65rem;
+  }
+
+  .camera-card {
+    padding: 0.65rem;
+  }
+
+  .helper {
+    margin-bottom: 0.5rem;
+  }
+
+  .camera-stage {
+    width: 100%;
+    margin: 0 auto;
+    /* Keep 3:4 but cap it so controls stay visible. */
+    max-height: 56svh;
+  }
+
+  .frame-picker {
+    margin-top: 0.55rem;
+    gap: 0.45rem;
+  }
+
+  .actions {
+    margin-top: 0.6rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .btn {
+    padding: 0.65rem 0.55rem;
+    font-size: 0.9rem;
+  }
+
+  .sammy-calibration {
+    margin-top: 0.55rem;
+    padding: 0.55rem;
+  }
+}
+
+@media (max-height: 700px) {
+  .camera-stage {
+    max-height: 52svh;
+  }
+
+  .actions {
+    margin-top: 0.55rem;
+  }
+}
