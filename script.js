@@ -194,7 +194,6 @@ document.addEventListener("DOMContentLoaded", () => {
   preloadFrameAssets();
   preloadSammyAsset();
   applySammyPoseToLive();
-  updateSammyCalibrationReadout();
   setFrame(state.selectedFrameId);
   initCamera();
   AnalyticsAdapter.track("app_loaded");
@@ -245,12 +244,6 @@ function cacheElements() {
   el.captureBtn = document.getElementById("captureBtn");
   el.shareBtn = document.getElementById("shareBtn");
   el.downloadLink = document.getElementById("downloadLink");
-  el.sammyCalibration = document.getElementById("sammyCalibration");
-  el.sammyXRange = document.getElementById("sammyXRange");
-  el.sammyYRange = document.getElementById("sammyYRange");
-  el.sammyScaleRange = document.getElementById("sammyScaleRange");
-  el.resetSammyBtn = document.getElementById("resetSammyBtn");
-  el.sammyCalibrationReadout = document.getElementById("sammyCalibrationReadout");
   el.previewCard = document.getElementById("previewCard");
   el.previewImage = document.getElementById("previewImage");
   el.shareModal = document.getElementById("shareModal");
@@ -265,9 +258,6 @@ function hydrateStaticCopy() {
   el.helperText.textContent = CONFIG.strings.helperText;
   el.shareModalMessage.textContent = CONFIG.strings.shareFallbackMessage;
   el.openFullScreenLink.href = window.location.href;
-  el.sammyXRange.value = String(state.sammyPose.x);
-  el.sammyYRange.value = String(state.sammyPose.y);
-  el.sammyScaleRange.value = String(state.sammyPose.scale);
 }
 
 function wireEvents() {
@@ -282,26 +272,6 @@ function wireEvents() {
   el.copyCaptionBtn.addEventListener("click", copyCaptionToClipboard);
   el.closeModalBtn.addEventListener("click", () => el.shareModal.close());
 
-  el.sammyXRange.addEventListener("input", () => {
-    state.sammyPose.x = Number(el.sammyXRange.value);
-    onSammyPoseChanged();
-  });
-  el.sammyYRange.addEventListener("input", () => {
-    state.sammyPose.y = Number(el.sammyYRange.value);
-    onSammyPoseChanged();
-  });
-  el.sammyScaleRange.addEventListener("input", () => {
-    state.sammyPose.scale = Number(el.sammyScaleRange.value);
-    onSammyPoseChanged();
-  });
-  el.resetSammyBtn.addEventListener("click", () => {
-    state.sammyPose = { ...CONFIG.sammy.defaultPose };
-    el.sammyXRange.value = String(state.sammyPose.x);
-    el.sammyYRange.value = String(state.sammyPose.y);
-    el.sammyScaleRange.value = String(state.sammyPose.scale);
-    onSammyPoseChanged();
-  });
-
   if (typeof el.shareModal.addEventListener === "function") {
     el.shareModal.addEventListener("click", (event) => {
       const rect = el.shareModal.getBoundingClientRect();
@@ -313,19 +283,6 @@ function wireEvents() {
       if (clickedOutside) el.shareModal.close();
     });
   }
-}
-
-function onSammyPoseChanged() {
-  applySammyPoseToLive();
-  updateSammyCalibrationReadout();
-  AnalyticsAdapter.track("sammy_pose_changed", { ...state.sammyPose });
-}
-
-function updateSammyCalibrationReadout() {
-  const pctX = Math.round(state.sammyPose.x * 100);
-  const pctY = Math.round(state.sammyPose.y * 100);
-  const pctScale = Math.round(state.sammyPose.scale * 100);
-  el.sammyCalibrationReadout.textContent = `X ${pctX}% · Y ${pctY}% · Scale ${pctScale}%`;
 }
 
 function applySammyPoseToLive() {
