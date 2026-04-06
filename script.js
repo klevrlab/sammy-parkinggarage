@@ -117,6 +117,7 @@ const state = {
   selectedFrameId: CONFIG.frames[0].id,
   captureBlob: null,
   captureUrl: "",
+  captureDataUrl: "",
   isPreviewMirrored: true,
   frameImageCache: new Map(),
   sammyImage: null,
@@ -163,9 +164,29 @@ const AnalyticsAdapter = {
   }
 };
 
+function isIOSDevice() {
+  const ua = navigator.userAgent || "";
+  const isIOSUA = /iPad|iPhone|iPod/.test(ua);
+  const isIPadOS = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+  return isIOSUA || isIPadOS;
+}
+
+function configureDownloadLinkForPlatform() {
+  if (!el.downloadLink) return;
+  el.downloadLink.rel = "noopener";
+  if (isIOSDevice()) {
+    el.downloadLink.textContent = "Open image";
+    el.downloadLink.target = "_blank";
+  } else {
+    el.downloadLink.textContent = "Download PNG";
+    el.downloadLink.removeAttribute("target");
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   cacheElements();
   hydrateStaticCopy();
+  configureDownloadLinkForPlatform();
   preloadSammyImage();
   initSegmentation();
   buildFramePicker();
@@ -510,10 +531,25 @@ async function capturePhoto() {
   }
   await drawFrameOverlay(ctx, canvas.width, canvas.height, frame);
 
+  const isIOS = isIOSDevice();
+  if (isIOS) {
+    try {
+      const dataUrl = canvas.toDataURL("image/png");
+      setCaptureResultDataUrl(dataUrl, frame.name);
+      AnalyticsAdapter.track("capture_success", { frameId: frame.id, path: "data_url" });
+    } catch (_err) {
+      // Fall back to blob path below.
+    }
+  }
+
   canvas.toBlob((blob) => {
     if (!blob) return;
-    setCaptureResult(blob, frame.name);
-    AnalyticsAdapter.track("capture_success", { frameId: frame.id });
+    if (!isIOS || (!state.captureDataUrl && !state.captureUrl)) {
+      setCaptureResult(blob, frame.name);
+    } else {
+      state.captureBlob = blob;
+    }
+    AnalyticsAdapter.track("capture_success", { frameId: frame.id, path: "blob" });
   }, "image/png");
 }
 
@@ -831,6 +867,7 @@ function setCaptureResult(blob, frameName) {
   if (state.captureUrl) URL.revokeObjectURL(state.captureUrl);
   state.captureBlob = blob;
   state.captureUrl = URL.createObjectURL(blob);
+  state.captureDataUrl = "";
   el.previewImage.src = state.captureUrl;
   el.previewCard.hidden = false;
   el.downloadLink.href = state.captureUrl;
@@ -839,8 +876,21 @@ function setCaptureResult(blob, frameName) {
   el.shareBtn.disabled = false;
 }
 
+function setCaptureResultDataUrl(dataUrl, frameName) {
+  if (state.captureUrl) URL.revokeObjectURL(state.captureUrl);
+  state.captureBlob = null;
+  state.captureUrl = "";
+  state.captureDataUrl = dataUrl;
+  el.previewImage.src = dataUrl;
+  el.previewCard.hidden = false;
+  el.downloadLink.href = dataUrl;
+  el.downloadLink.download = buildCaptureFilename(frameName);
+  el.downloadLink.classList.remove("disabled");
+  el.shareBtn.disabled = false;
+}
+
 function updateDownloadMetadata() {
-  if (!state.captureBlob) return;
+  if (!state.captureBlob && !state.captureDataUrl) return;
   const frame = getFrameById(state.selectedFrameId);
   el.downloadLink.download = buildCaptureFilename(frame.name);
 }
