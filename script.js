@@ -55,12 +55,14 @@ const CONFIG = {
   },
   segmentation: {
     modelSelection: 1,
-    edgeBlurPx: 3,
-    temporalSmoothing: 0.32
+    edgeBlurPx: 1,
+    temporalSmoothing: 0.18,
+    maskContrastPercent: 260
   },
   sammy: {
     defaultPose: { x: 0.79, y: 0.52, scale: 0.3 },
     imageSrc: "assets/SammyTheSpartan.png",
+    mobileScaleMultiplier: 0.88,
     shadowOpacity: 0.32,
     shadowBlur: 20,
     shadowScaleX: 0.34,
@@ -183,6 +185,26 @@ function configureDownloadLinkForPlatform() {
   }
 }
 
+function isNarrowViewport() {
+  return window.matchMedia("(max-width: 639px)").matches;
+}
+
+function getEffectiveSammyPose() {
+  const base = state.sammyPose;
+  if (!isNarrowViewport()) return base;
+  const scaled = base.scale * CONFIG.sammy.mobileScaleMultiplier;
+  return {
+    x: base.x,
+    y: base.y,
+    scale: Math.max(0.12, Math.min(0.62, scaled))
+  };
+}
+
+function revealPostCaptureActions() {
+  if (!el.postCaptureActions) return;
+  el.postCaptureActions.hidden = false;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   cacheElements();
   hydrateStaticCopy();
@@ -244,6 +266,7 @@ function cacheElements() {
   el.captureBtn = document.getElementById("captureBtn");
   el.shareBtn = document.getElementById("shareBtn");
   el.downloadLink = document.getElementById("downloadLink");
+  el.postCaptureActions = document.getElementById("postCaptureActions");
   el.previewCard = document.getElementById("previewCard");
   el.previewImage = document.getElementById("previewImage");
   el.shareModal = document.getElementById("shareModal");
@@ -286,9 +309,10 @@ function wireEvents() {
 }
 
 function applySammyPoseToLive() {
-  el.sammyWrap.style.left = `${(state.sammyPose.x * 100).toFixed(1)}%`;
-  el.sammyWrap.style.top = `${(state.sammyPose.y * 100).toFixed(1)}%`;
-  el.sammyWrap.style.width = `${(state.sammyPose.scale * 100).toFixed(1)}%`;
+  const pose = getEffectiveSammyPose();
+  el.sammyWrap.style.left = `${(pose.x * 100).toFixed(1)}%`;
+  el.sammyWrap.style.top = `${(pose.y * 100).toFixed(1)}%`;
+  el.sammyWrap.style.width = `${(pose.scale * 100).toFixed(1)}%`;
 }
 
 async function initCamera() {
@@ -652,7 +676,10 @@ function drawPersonForeground(ctx, w, h) {
   drawVideoCover(pctx, w, h, el.cameraVideo, state.isPreviewMirrored);
 
   pctx.globalCompositeOperation = "destination-in";
-  pctx.filter = `blur(${CONFIG.segmentation.edgeBlurPx}px)`;
+  const blurPx = Math.max(0, CONFIG.segmentation.edgeBlurPx || 0);
+  const contrast = Math.max(100, CONFIG.segmentation.maskContrastPercent || 100);
+  // Boost contrast so the alpha mask is closer to binary (less "fade-through").
+  pctx.filter = `blur(${blurPx}px) contrast(${contrast}%)`;
   pctx.drawImage(compositor.smoothMaskCanvas, 0, 0, w, h);
   pctx.filter = "none";
   pctx.globalCompositeOperation = "source-over";
@@ -785,10 +812,11 @@ function drawSammyOverlay(ctx, w, h) {
 }
 
 function getSammyRect(w, h) {
-  const baseW = w * state.sammyPose.scale;
+  const pose = getEffectiveSammyPose();
+  const baseW = w * pose.scale;
   const baseH = baseW * 1.2;
-  const centerX = w * state.sammyPose.x;
-  const centerY = h * state.sammyPose.y;
+  const centerX = w * pose.x;
+  const centerY = h * pose.y;
   return {
     x: centerX - baseW / 2,
     y: centerY - baseH / 2,
@@ -820,6 +848,7 @@ function setCaptureResult(blob, frameName) {
   state.captureDataUrl = "";
   el.previewImage.src = state.captureUrl;
   el.previewCard.hidden = false;
+  revealPostCaptureActions();
   el.downloadLink.href = state.captureUrl;
   el.downloadLink.download = buildCaptureFilename(frameName);
   el.downloadLink.classList.remove("disabled");
@@ -833,6 +862,7 @@ function setCaptureResultDataUrl(dataUrl, frameName) {
   state.captureDataUrl = dataUrl;
   el.previewImage.src = dataUrl;
   el.previewCard.hidden = false;
+  revealPostCaptureActions();
   el.downloadLink.href = dataUrl;
   el.downloadLink.download = buildCaptureFilename(frameName);
   el.downloadLink.classList.remove("disabled");
@@ -852,11 +882,16 @@ function buildCaptureFilename(frameName) {
 }
 
 async function shareCapture() {
-  AnalyticsAdapter.track("share_attempt", { hasCapture: Boolean(state.captureBlob) });
-  if (!state.captureBlob) {
+  const hasCapture = Boolean(state.captureBlob || state.captureDataUrl);
+  AnalyticsAdapter.track("share_attempt", { hasCapture });
+  if (!hasCapture) {
     await copyCaptionToClipboard();
     showStageState("Take a capture first. Caption copied for convenience.", "error");
     return;
+  }
+
+  if (!state.captureBlob && state.captureDataUrl) {
+    state.captureBlob = dataUrlToBlob(state.captureDataUrl);
   }
 
   const shareData = {
@@ -982,6 +1017,17 @@ function loadImage(src) {
     image.onerror = reject;
     image.src = src;
   });
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [meta, base64] = dataUrl.split(",");
+  const mime = /data:(.*?);base64/.exec(meta)?.[1] || "image/png";
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mime });
 }
 
 function showStageState(message, type) {

@@ -81,15 +81,26 @@
           <div class="stage-state" id="stageState" role="status" hidden></div>
         </div>
 
-        <div class="frame-picker" id="framePicker" role="group" aria-label="Choose a frame"></div>
-
-        <div class="actions">
+        <div class="primary-actions" aria-label="Camera controls">
           <button id="flipBtn" class="btn btn-secondary" type="button">
             Flip camera
           </button>
           <button id="captureBtn" class="btn btn-primary" type="button">
             Capture
           </button>
+        </div>
+
+        <div class="frame-picker-wrap">
+          <p class="section-label">Styles</p>
+          <div
+            class="frame-picker"
+            id="framePicker"
+            role="group"
+            aria-label="Choose a frame"
+          ></div>
+        </div>
+
+        <div class="post-capture-actions" id="postCaptureActions" hidden aria-label="Post capture actions">
           <button id="shareBtn" class="btn btn-secondary" type="button" disabled>
             Share
           </button>
