@@ -86,7 +86,7 @@ body {
 
 .title {
   margin: 0;
-  font-size: 1.02rem;
+  font-size: 1.12rem;
   font-weight: 800;
   color: var(--sjsu-blue-deep);
 }
@@ -280,6 +280,7 @@ body {
   display: flex;
   overflow-x: auto;
   gap: 0.42rem;
+  justify-content: center;
   padding-bottom: 0.12rem;
   scrollbar-width: thin;
 }
@@ -295,6 +296,7 @@ body {
   font-size: 0.8rem;
   line-height: 1;
   white-space: nowrap;
+  cursor: pointer;
 }
 
 .frame-btn.active {
@@ -320,6 +322,15 @@ body {
   text-decoration: none;
   cursor: pointer;
   min-height: 2.75rem;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+  filter: brightness(0.94);
+}
+
+.frame-btn:active {
+  filter: brightness(0.93);
 }
 
 .btn-primary {

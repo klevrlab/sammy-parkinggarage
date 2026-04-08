@@ -185,6 +185,23 @@ function configureDownloadLinkForPlatform() {
   }
 }
 
+async function goFullScreen() {
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      return;
+    }
+    if (document.documentElement && typeof document.documentElement.requestFullscreen === "function") {
+      await document.documentElement.requestFullscreen();
+    }
+  } catch (_err) {
+    // Fullscreen can be blocked by browser policy; fall back to opening the page in a new tab.
+    if (el.openFullScreenLink && el.openFullScreenLink.href) {
+      window.open(el.openFullScreenLink.href, "_blank", "noopener,noreferrer");
+    }
+  }
+}
+
 function isNarrowViewport() {
   return window.matchMedia("(max-width: 639px)").matches;
 }
@@ -284,6 +301,11 @@ function hydrateStaticCopy() {
 }
 
 function wireEvents() {
+  el.openFullScreenLink.addEventListener("click", async (event) => {
+    event.preventDefault();
+    await goFullScreen();
+  });
+
   el.flipBtn.addEventListener("click", async () => {
     state.currentFacingMode = state.currentFacingMode === "user" ? "environment" : "user";
     AnalyticsAdapter.track("camera_flip", { facingMode: state.currentFacingMode });
