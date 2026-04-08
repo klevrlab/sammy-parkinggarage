@@ -3,7 +3,6 @@
 const CONFIG = {
   strings: {
     pageTitle: "Selfie with Sammy",
-    billboardMessage: "King Library is for EVERYONE",
     insideFrameMessage: "King Library is for YOU",
     helperText: "Take a selfie with Sammy (demo overlay)",
     loadingCamera: "Starting camera...",
@@ -261,7 +260,6 @@ function initSegmentation() {
 }
 
 function cacheElements() {
-  el.billboardMessage = document.getElementById("billboardMessage");
   el.helperText = document.getElementById("helperText");
   el.openFullScreenLink = document.getElementById("openFullScreenLink");
   el.cameraVideo = document.getElementById("cameraVideo");
@@ -294,7 +292,6 @@ function cacheElements() {
 
 function hydrateStaticCopy() {
   document.title = CONFIG.strings.pageTitle;
-  el.billboardMessage.textContent = CONFIG.strings.billboardMessage;
   el.helperText.textContent = CONFIG.strings.helperText;
   el.shareModalMessage.textContent = CONFIG.strings.shareFallbackMessage;
   el.openFullScreenLink.href = window.location.href;

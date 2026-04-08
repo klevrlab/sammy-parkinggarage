@@ -32,20 +32,23 @@ body {
   padding: 0.5rem 0.55rem 0.9rem;
 }
 
-.billboard {
-  margin-bottom: 0.45rem;
-  padding: 0.45rem 0.6rem;
-  border-left: 3px solid var(--sjsu-gold);
-  background: #eef4ff;
-  border-radius: 10px;
+.credits {
+  margin-top: 0.75rem;
+  padding: 0.25rem 0.1rem 0;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--text-muted);
 }
 
-.billboard p {
-  margin: 0;
-  font-weight: 700;
-  font-size: 0.9rem;
-  letter-spacing: 0.01em;
+.credits-handle {
+  font-weight: 800;
   color: var(--sjsu-blue-deep);
+  text-decoration: none;
+}
+
+.credits-handle:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
 }
 
 .camera-card,
@@ -427,8 +430,3 @@ dialog h2 {
   }
 }
 
-@media (max-width: 639px) {
-  .billboard {
-    display: none;
-  }
-}
